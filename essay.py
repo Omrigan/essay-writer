@@ -1,7 +1,10 @@
+#!/usr/bin/python3
 import re
 import random
 import pymorphy2
 import json
+import emotions
+from plumbum import cli
 
 morph = pymorphy2.MorphAnalyzer()
 
@@ -24,12 +27,27 @@ shuffled = set()
 def mychoise(lst):
     kek = lst.pop(0)
     lst.append(kek)
-    return lst[0]
+    return random.choice(lst)
+
+
+def to_padez(val, padez):
+    if padez in codes:
+        padez = codes[padez]
+    return morph.parse(val)[0].inflect({padez}).word
+
+
+def getwordlist(s):
+    clear_text = re.sub("[^а-яА-Я]",
+                        " ",  # The pattern to replace it with
+                        s)
+    s = s[0].lower() + s[1:]
+    local_words = clear_text.split()
+    return local_words
 
 
 class EssayBuilder:
-    def __init__(self):
-        self.text = open('raw-text.txt', 'r').read().split('\n')
+    def __init__(self, raw_text):
+        self.text = raw_text.split('\n')
         self.author = self.text[-1]
         self.text = "".join(self.text[:-1])
 
@@ -38,10 +56,7 @@ class EssayBuilder:
 
         words = {}
         for i, s in zip(range(10 ** 9), self.text_tokens):
-            clear_text = re.sub("[^а-яА-Я]",
-                                " ",  # The pattern to replace it with
-                                s.lower())
-            local_words = clear_text.split()
+            local_words = getwordlist(s)
             words_cnt = {}
             for w in local_words:
                 p = morph.parse(w)
@@ -89,33 +104,49 @@ class EssayBuilder:
         return ret
 
     def get_problem(self):
-        self.samples['problem'] = ['Почему так важно понятие #baseword_g?']
-        return ['В жизни часто приходится думать о #baseword_l',
-                "\"#problem\" - именно такую проблему поднимает #author в данном фрагменте текста"]
+        return ['#intro',
+                "#wholeproblem"]
 
-    def to_loct(self, val):
-        return morph.parse(val)[0].inflect({'loct'}).word
+    def get_quatation_comment(self):
+        w = mychoise(self.good_words)
+        s = self.text_tokens[mychoise(w['sent'])[0]]
+        comment = ["#commentbegin, #author в словах \"%s\" #speaks о %s" % \
+                   (s, to_padez(w['word'], 'loct'))]
+        return comment
 
-    def get_comment(self):
-        comment = []
-        for i in range(3):
+    def get_epitet(self):
+        noun = []
+        w = None
+        while len(noun) < 2:
+            noun = []
             w = mychoise(self.good_words)
             s = self.text_tokens[mychoise(w['sent'])[0]]
-            comment2 = ["#commentbegin, #author в словах \"%s\" #speaks о %s" % \
-                        (s, self.to_loct(w['word']))]
-            comment.extend(comment2)
+            for _ in getwordlist(s):
+                word = morph.parse(_)[0]
+                if w['word'] != word.normal_form and 'NOUN' in word.tag:
+                    noun.append(word.normal_form)
+
+        comment = ["показывая важность понятия \"%s\", #author оперирует понятиями %s и %s" % \
+                   (w['word'], to_padez(noun[0], 'g'), to_padez(noun[1], 'g'))]
+        return comment
+
+    def get_comment(self):
+        comment_sources = [self.get_quatation_comment, self.get_epitet]
+        comment = []
+        for i in range(3):
+            comment.extend(mychoise(comment_sources)())
         return comment
 
     def get_author_position(self):
-        return ["позиция #author_g этого фрагмента лучше всего выраженна цитатой: \"%s\"" %
+        return ["позиция #author_g в этом фрагменте лучше всего выраженна цитатой: \"%s\"" %
                 (random.choice(self.text_tokens))]
 
     def get_my_position(self):
         return ["#myposition"]
 
     def get_lit_argument(self):
-        curbook = arguments[0]
-        curarg = random.choice(curbook['args'])
+        curbook = mychoise(arguments)
+        curarg = mychoise(curbook['args'])
         replacements = {
             'author': curbook['author'],
             'book': curbook['book'],
@@ -131,15 +162,18 @@ class EssayBuilder:
                 "#example, в романе %(book)s, который написал %(author)s,"
                 " герой по имени %(hero)s %(action)s, показывая таким образом своё отношение к #baseword_d" % replacements]
 
+    def get_left_argument(self):
+        pass
+
     def get_conclusion(self):
         return ["#conclude0 #many в жизни зависит от #baseword_g",
                 "Необходимо всегда помнить о важности этого понятия в нашей жизни"]
 
     def build_essay(self):
-        out = open('essay.txt', 'w')
         abzaces = [self.get_problem(), self.get_comment(), self.get_author_position(),
                    self.get_my_position(), self.get_lit_argument(), self.get_conclusion()]
         nonterm = re.compile('#[a-z0-9_]+')
+        str_out_all = ''
         for a in abzaces:
             str_out = ''
             for s in a:
@@ -152,8 +186,36 @@ class EssayBuilder:
 
                 str_out += s[0].upper() + s[1:] + '. '
             str_out += '\n'
-            out.write(str_out)
+            str_out_all += str_out
+        return str_out_all
 
 
-e = EssayBuilder()
-e.build_essay()
+from sys import stdin, stdout
+
+
+class MyApp(cli.Application):
+    _abuse = 0
+    _output = ''
+
+    @cli.switch(['-e'], float, help='Change emotionality')
+    def abuse_lexical(self, abuse):
+        self._abuse = abuse
+
+    @cli.switch(['-o'], str, help='Output')
+    def output(self, output):
+        self._output = output
+
+
+    def main(self, filename='text-tokareva.txt'):
+        raw_text = open('text-tokareva.txt', 'r').read()
+        if self._output=='':
+            self._output=filename+'.out'
+        out = open(self._output, 'w')
+        e = EssayBuilder(raw_text)
+        str_out = e.build_essay()
+        str_out = emotions.process(str_out, self._abuse)
+        out.write(str_out)
+
+
+if __name__ == '__main__':
+    MyApp.run()
