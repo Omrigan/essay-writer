@@ -206,8 +206,8 @@ class MyApp(cli.Application):
         self._output = output
 
 
-    def main(self, filename='text-tokareva.txt'):
-        raw_text = open('text-tokareva.txt', 'r').read()
+    def main(self, filename='text.txt'):
+        raw_text = open(filename, 'r').read()
         if self._output=='':
             self._output=filename+'.out'
         out = open(self._output, 'w')
