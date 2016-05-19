@@ -48,6 +48,7 @@ def getwordlist(s):
 class EssayBuilder:
     def __init__(self, raw_text):
         self.text = raw_text.split('\n')
+        self.text = list(filter(lambda a: len(a)>5, self.text))
         self.author = self.text[-1]
         self.text = "".join(self.text[:-1])
 
@@ -163,7 +164,7 @@ class EssayBuilder:
                 " герой по имени %(hero)s %(action)s, показывая таким образом своё отношение к #baseword_d" % replacements]
 
     def get_left_argument(self):
-        pass
+        return self.get_lit_argument()
 
     def get_conclusion(self):
         return ["#conclude0 #many в жизни зависит от #baseword_g",
@@ -171,7 +172,7 @@ class EssayBuilder:
 
     def build_essay(self):
         abzaces = [self.get_problem(), self.get_comment(), self.get_author_position(),
-                   self.get_my_position(), self.get_lit_argument(), self.get_conclusion()]
+                   self.get_my_position(), self.get_lit_argument(), self.get_left_argument(), self.get_conclusion()]
         nonterm = re.compile('#[a-z0-9_]+')
         str_out_all = ''
         for a in abzaces:
@@ -205,11 +206,10 @@ class MyApp(cli.Application):
     def output(self, output):
         self._output = output
 
-
     def main(self, filename='text.txt'):
         raw_text = open(filename, 'r').read()
-        if self._output=='':
-            self._output=filename+'.out'
+        if self._output == '':
+            self._output = filename + '.out'
         out = open(self._output, 'w')
         e = EssayBuilder(raw_text)
         str_out = e.build_essay()
