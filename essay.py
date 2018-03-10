@@ -19,7 +19,6 @@ codes = {
 
 keywords = set(open('keywords.txt').read().replace(' ', '').split('\n'))
 arguments = json.load(open('arguments.json'))
-random.shuffle(arguments)
 
 shuffled = set()
 
@@ -205,6 +204,16 @@ class MyApp(cli.Application):
     @cli.switch(['-o'], str, help='Output')
     def output(self, output):
         self._output = output
+
+    @cli.switch(['--new'], str, help='New arguments')
+    def output(self, args):
+        global arguments
+        if  args:
+            arguments = json.load(open('arguments-new.json'))
+        else:
+            arguments = json.load(open('arguments.json'))
+        random.shuffle(arguments)
+        print(arguments)
 
     def main(self, filename='text.txt'):
         raw_text = open(filename, 'r').read()
